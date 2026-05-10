@@ -102,7 +102,9 @@ export function useGeolocation(enabled = true): UseGeolocationResult {
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,
+        // Tillåt fix upp till 5 s gammal – annars vägrar Android Chrome ofta
+        // returnera något alls och timar ut.
+        maximumAge: 5_000,
         timeout: 30_000,
       },
     );

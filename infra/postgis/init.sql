@@ -101,6 +101,6 @@ VALUES
     'geologi'
   ),
   {
-    'Brännkyrkagatan 41',
+    'Brännkyrkagatan',
   }
 ON CONFLICT DO NOTHING;

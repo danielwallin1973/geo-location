@@ -127,7 +127,7 @@ export function ExplorerView() {
       </header>
 
       <AudioPlayer poi={activePoi} onClose={() => setActivePoi(null)} />
-      <GeoDebugOverlay enabled={started} />
+      <GeoDebugOverlay enabled={started} position={position} error={error} />
     </div>
   );
 }

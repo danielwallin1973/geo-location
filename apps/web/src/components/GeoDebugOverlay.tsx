@@ -1,26 +1,35 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { GeoPosition } from '@/hooks/useGeolocation';
 
 interface GeoEvent {
-  t: number; // ms sedan start
+  t: number;
   kind: 'fix' | 'error' | 'force' | 'info';
   text: string;
 }
 
 interface GeoDebugOverlayProps {
   enabled: boolean;
+  /** Live-position från huvudhooken – vi loggar varje förändring. */
+  position: GeoPosition | null;
+  /** Senaste error-meddelande från huvudhooken. */
+  error: string | null;
 }
 
 /**
- * Visar en svart overlay med live-logg av allt geolocation-API:et säger.
- * Helt fristående från useGeolocation – pratar direkt med navigator.geolocation,
- * så vi kan jämföra och se om det är vår hook eller browsern som inte uppdaterar.
+ * Visar en svart overlay med live-logg av varje GPS-fix vi får från
+ * useGeolocation-hooken (för att inte konkurrera om watchPosition-slottar
+ * på Android Chrome).
+ *
+ * Har också "Force HIGH/LOW"-knappar som ringer geolocation-API:et direkt
+ * när du behöver tvinga fram en omedelbar fix för felsökning.
  */
-export function GeoDebugOverlay({ enabled }: GeoDebugOverlayProps) {
+export function GeoDebugOverlay({ enabled, position, error }: GeoDebugOverlayProps) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<GeoEvent[]>([]);
   const startRef = useRef<number>(Date.now());
+  const lastTsRef = useRef<number>(0);
   const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const log = (e: Omit<GeoEvent, 't'>) => {
@@ -31,45 +40,37 @@ export function GeoDebugOverlay({ enabled }: GeoDebugOverlayProps) {
   };
 
   useEffect(() => {
-    if (!enabled) return;
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      log({ kind: 'error', text: 'navigator.geolocation saknas' });
-      return;
+    if (!enabled || !position) return;
+    if (position.timestamp === lastTsRef.current) return;
+    lastTsRef.current = position.timestamp;
+
+    const lat = position.coords[1];
+    const lng = position.coords[0];
+    const last = lastCoordsRef.current;
+    let movedMeters = 0;
+    if (last) {
+      const dy = (lat - last.lat) * 111_000;
+      const dx = (lng - last.lng) * 111_000 * Math.cos((lat * Math.PI) / 180);
+      movedMeters = Math.sqrt(dx * dx + dy * dy);
     }
+    lastCoordsRef.current = { lat, lng };
 
-    log({ kind: 'info', text: 'startar watchPosition…' });
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const last = lastCoordsRef.current;
-        let movedMeters = 0;
-        if (last) {
-          const dy = (lat - last.lat) * 111_000;
-          const dx = (lng - last.lng) * 111_000 * Math.cos((lat * Math.PI) / 180);
-          movedMeters = Math.sqrt(dx * dx + dy * dy);
-        }
-        lastCoordsRef.current = { lat, lng };
-        log({
-          kind: 'fix',
-          text: `${lat.toFixed(6)}, ${lng.toFixed(6)} ±${Math.round(pos.coords.accuracy)}m  Δ${movedMeters.toFixed(1)}m`,
-        });
-      },
-      (err) => {
-        log({ kind: 'error', text: `code=${err.code} ${err.message}` });
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 30_000 },
-    );
+    log({
+      kind: 'fix',
+      text: `${lat.toFixed(6)}, ${lng.toFixed(6)} ±${Math.round(position.accuracyMeters)}m  Δ${movedMeters.toFixed(1)}m`,
+    });
+  }, [position, enabled]);
 
-    return () => {
-      navigator.geolocation.clearWatch(id);
-      log({ kind: 'info', text: 'clearWatch' });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  useEffect(() => {
+    if (!enabled || !error) return;
+    log({ kind: 'error', text: error });
+  }, [error, enabled]);
 
-  const forceFix = () => {
-    log({ kind: 'force', text: 'getCurrentPosition()…' });
+  const forceFix = (highAccuracy: boolean) => {
+    log({
+      kind: 'force',
+      text: highAccuracy ? 'getCurrentPosition (high)…' : 'getCurrentPosition (low)…',
+    });
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         log({
@@ -77,8 +78,16 @@ export function GeoDebugOverlay({ enabled }: GeoDebugOverlayProps) {
           text: `→ ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)} ±${Math.round(pos.coords.accuracy)}m`,
         });
       },
-      (err) => log({ kind: 'error', text: `force fail: ${err.message}` }),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
+      (err) =>
+        log({
+          kind: 'error',
+          text: `force fail (code ${err.code}): ${err.message}`,
+        }),
+      {
+        enableHighAccuracy: highAccuracy,
+        maximumAge: highAccuracy ? 5_000 : 60_000,
+        timeout: 20_000,
+      },
     );
   };
 
@@ -122,22 +131,37 @@ export function GeoDebugOverlay({ enabled }: GeoDebugOverlayProps) {
             overflowY: 'auto',
           }}
         >
-          <button
-            type="button"
-            onClick={forceFix}
-            style={{
-              background: '#0f0',
-              color: '#000',
-              border: 'none',
-              padding: '4px 8px',
-              borderRadius: 4,
-              marginBottom: 6,
-              fontWeight: 600,
-            }}
-          >
-            Force getCurrentPosition
-          </button>
-          {events.length === 0 && <div>(inga events än)</div>}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <button
+              type="button"
+              onClick={() => forceFix(true)}
+              style={{
+                background: '#0f0',
+                color: '#000',
+                border: 'none',
+                padding: '4px 8px',
+                borderRadius: 4,
+                fontWeight: 600,
+              }}
+            >
+              Force HIGH
+            </button>
+            <button
+              type="button"
+              onClick={() => forceFix(false)}
+              style={{
+                background: '#ff0',
+                color: '#000',
+                border: 'none',
+                padding: '4px 8px',
+                borderRadius: 4,
+                fontWeight: 600,
+              }}
+            >
+              Force LOW
+            </button>
+          </div>
+          {events.length === 0 && <div>(inga events än – vänta på fix…)</div>}
           {events.map((e, i) => (
             <div
               key={i}
