@@ -99,5 +99,8 @@ VALUES
     45,
     '/audio/skinnarviksberget.mp3',
     'geologi'
-  )
+  ),
+  {
+    'Brännkyrkagatan 41',
+  }
 ON CONFLICT DO NOTHING;

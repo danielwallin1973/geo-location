@@ -9,6 +9,7 @@ import { fetchNearbyPois } from '@/lib/api';
 import { MapView } from './MapView';
 import { AudioPlayer } from './AudioPlayer';
 import { StartJourneyOverlay } from './StartJourneyOverlay';
+import { GeoDebugOverlay } from './GeoDebugOverlay';
 import styles from './ExplorerView.module.scss';
 /**
  * Huvudvyn som binder ihop:
@@ -126,6 +127,7 @@ export function ExplorerView() {
       </header>
 
       <AudioPlayer poi={activePoi} onClose={() => setActivePoi(null)} />
+      <GeoDebugOverlay enabled={started} />
     </div>
   );
 }
