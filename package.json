@@ -4,9 +4,11 @@
   "private": true,
   "description": "En geo-audio-guide för det offentliga rummet – museum utomhus.",
   "scripts": {
-    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
-    "build": "pnpm -r build",
+    "dev": "pnpm --filter @geo-audio/web dev",
+    "build": "pnpm --filter @geo-audio/web build",
+    "start": "pnpm --filter @geo-audio/web start",
     "lint": "pnpm -r lint",
+    "audio:generate": "pnpm --filter @geo-audio/web audio:generate",
     "db:up": "docker compose -f infra/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "db:logs": "docker compose -f infra/docker-compose.yml logs -f postgis"

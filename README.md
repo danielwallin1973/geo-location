@@ -6,71 +6,108 @@ platser – som ett museum i det offentliga rummet.
 ## Stack
 
 - **Monorepo:** pnpm workspaces
-- **Frontend** (`apps/web`): Next.js 15 (App Router), TypeScript, Sass (modules), MapLibre GL
-- **Backend** (`apps/api`): Fastify + TypeScript, `pg` (node-postgres)
-- **Databas:** PostgreSQL 16 + PostGIS (lokalt via Docker)
-- **Delade typer:** `packages/shared`
+- **App** ([apps/web](apps/web)): Next.js 15 (App Router), TypeScript, Sass modules, MapLibre GL
+- **API:** Next.js Route Handlers under [apps/web/src/app/api](apps/web/src/app/api)
+- **Databas:** PostgreSQL + PostGIS (lokalt: Docker, prod: Supabase)
+- **TTS:** OpenAI text-to-speech via [apps/web/scripts/generate-audio.ts](apps/web/scripts/generate-audio.ts)
+- **Delade typer:** [packages/shared](packages/shared/src/index.ts)
 
-Geofencing sker i klienten – servern slipper få positionspingar och kan därmed
-skala till många samtidiga användare.
+Geofencing sker i klienten – servern slipper få positionspingar, vilket gör att
+samma serverless-funktion klarar tusentals samtidiga användare.
 
-## Komma igång
+## Lokal utveckling
 
 Förutsättningar: Node ≥ 20, pnpm 9, Docker.
 
 ```bash
-# 1. Installera deps
 pnpm install
-
-# 2. Starta Postgres + PostGIS i bakgrunden
-pnpm db:up
-
-# 3. Konfigurera env-filer
-cp apps/api/env.example apps/api/.env
-cp apps/web/env.example apps/web/.env.local
-
-# 4. Starta båda apparna parallellt
+pnpm db:up                                       # Postgres+PostGIS via Docker
+cp apps/web/env.example apps/web/.env.local      # Fyll i OPENAI_API_KEY
+pnpm audio:generate                              # Generera mp3:er (~$0.05)
 pnpm dev
 ```
 
-- Webben: http://localhost:1234
-- API: http://localhost:4000/health
+Öppna http://localhost:1234 → tryck "Starta resa" → tillåt plats.
 
-> **Tips för dev:** modern browser kräver HTTPS för Geolocation på "riktiga" hostnames,
-> men `localhost` räknas som säkert. För test på mobil i samma nätverk – använd
-> ett verktyg som `mkcert` eller `next dev --experimental-https`.
+## Produktion: Vercel + Supabase
+
+### 1. Sätt upp Supabase
+
+1. Skapa konto på https://supabase.com → nytt projekt
+2. Vänta tills DB är klar
+3. Gå till **SQL Editor** → kör innehållet i [infra/postgis/init.sql](infra/postgis/init.sql)
+   (PostGIS-extensionen finns förinstallerad)
+4. Gå till **Project Settings → Database → Connection string → Transaction Pooler**
+   - Kopiera URL:en (port 6543)
+   - **Använd just Transaction Pooler** – serverless-funktioner kan inte hålla
+     vanliga DB-connections.
+
+### 2. Deploy till Vercel
+
+Snabbast via GitHub-integration:
+
+1. Pusha repot till GitHub
+2. Importera på https://vercel.com/new
+3. **Root Directory:** `apps/web`
+4. **Framework Preset:** Next.js (autodetect)
+5. **Environment Variables:**
+   - `DATABASE_URL` = Supabase Transaction Pooler URL
+6. Deploy
+
+### 3. Generera ljud lokalt → committa till repo
+
+Audio-filerna ligger i [apps/web/public/audio/](apps/web/public/audio) och
+servas som statiska filer av Vercel. Sätt `DATABASE_URL` i
+`apps/web/.env.local` till **Supabase**-URL:en, kör:
+
+```bash
+pnpm audio:generate
+git add apps/web/public/audio
+git commit -m "Add audio for new POIs"
+git push
+```
+
+## Mobiltest – så funkar det utomhus
+
+1. Deploya till Vercel → du får en HTTPS-URL (krävs för Geolocation på mobil).
+2. Öppna URL:en på mobilen.
+3. Tryck **"Starta resa"** → tillåt plats → skärmen hålls vaken.
+4. Gå mot en POI → ljud spelas automatiskt när du kommer inom radien.
+
+> **Tips:** Använd hörlurar. Om du sparar URL:en på hemskärmen får du
+> en helskärmsupplevelse utan browser-chrome.
+
+## Viktiga begränsningar
+
+- **Förgrundstracking only.** När browsern inte är i förgrunden pausar GPS.
+  För riktig bakgrunds-tracking behövs nativ wrapper (Capacitor/React Native).
+- **iOS Safari + audio:** därför finns "Starta resa"-overlay – en användargest
+  krävs för att låsa upp ljud-autoplay.
 
 ## Mappstruktur
 
 ```
 geo-audio/
-├── apps/
-│   ├── web/            # Next.js
-│   └── api/            # Fastify
-├── packages/
-│   └── shared/         # Delade TS-typer
+├── apps/web/
+│   ├── src/
+│   │   ├── app/                 # Sidor + Route Handlers (/api/...)
+│   │   ├── components/          # React-komponenter
+│   │   ├── hooks/               # useGeolocation, useGeofence, useWakeLock
+│   │   ├── lib/                 # api-klient, geo-utils, db
+│   │   └── styles/              # Sass tokens + mixins
+│   ├── scripts/                 # generate-audio.ts
+│   └── public/audio/            # mp3:er (genererade)
+├── packages/shared/             # Delade TS-typer
 ├── infra/
-│   ├── docker-compose.yml
-│   └── postgis/init.sql
-├── pnpm-workspace.yaml
-└── package.json
+│   ├── docker-compose.yml       # Lokal Postgres+PostGIS
+│   └── postgis/init.sql         # Schema + demo-POIer
+└── pnpm-workspace.yaml
 ```
 
-## Hur geofencing fungerar
+## Nästa steg
 
-1. Browsern ger oss kontinuerliga positioner via `navigator.geolocation.watchPosition`.
-2. Vi hämtar POI:er inom 1.5 km en gång, och refetchar bara när vi rört oss > 200 m.
-3. Klienten kollar för varje positionsuppdatering om vi är inom någon POI:s
-   `triggerRadiusMeters` – om ja triggas ljuduppspelning.
-4. En cooldown per POI hindrar att samma plats spelas om och om igen.
-
-Resultat: backenden gör bara billiga, cachade läsningar – skalar enkelt horisontellt.
-
-## Nästa steg (förslag)
-
-- [ ] Autentisering (Auth.js) när det behövs.
-- [ ] Admin-UI för att lägga till POI:er.
-- [ ] PWA + service worker för offline-cache av ljudfiler.
-- [ ] Object storage (R2/S3) för ljud + signerade URL:er.
-- [ ] Redis-cache för POI-tiles framför Postgres.
-- [ ] Rate-limiting i Fastify.
+- [ ] PWA + service worker för offline-cache av ljud
+- [ ] Object storage (R2/S3) istället för git-checkade mp3:er
+- [ ] Admin-UI för att lägga till POI:er via karta
+- [ ] Klick-på-karta för att simulera position (dev-läge)
+- [ ] POI-lista i UI:et med avstånd

@@ -4,25 +4,32 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Poi } from '@geo-audio/shared';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useGeofence } from '@/hooks/useGeofence';
+import { useWakeLock } from '@/hooks/useWakeLock';
 import { fetchNearbyPois } from '@/lib/api';
 import { MapView } from './MapView';
 import { AudioPlayer } from './AudioPlayer';
+import { StartJourneyOverlay } from './StartJourneyOverlay';
 import styles from './ExplorerView.module.scss';
 
 /**
  * Huvudvyn som binder ihop:
+ * - "Starta resa"-overlay (krävs för att låsa upp ljud-autoplay i iOS)
  * - GPS (useGeolocation)
  * - POI-hämtning från API:et (refetch när användaren rört sig tillräckligt)
  * - Geofencing-trigger (useGeofence)
+ * - Wake Lock så skärmen inte släcks
  * - Karta + ljudspelare
  */
 export function ExplorerView() {
-  const { position, error, loading } = useGeolocation();
+  const [started, setStarted] = useState(false);
+  const { position, error, loading } = useGeolocation(started);
   const [pois, setPois] = useState<Poi[]>([]);
   const [activePoi, setActivePoi] = useState<Poi | null>(null);
   const [lastFetchCoords, setLastFetchCoords] = useState<
     [number, number] | null
   >(null);
+
+  useWakeLock(started);
 
   // Hämta POI:er kring användaren – men bara om vi rört oss > 200m sedan sist.
   useEffect(() => {
@@ -56,6 +63,32 @@ export function ExplorerView() {
     pois,
     onEnter: handleGeofenceEnter,
   });
+
+  const handleStart = useCallback(() => {
+    // "Lås upp" ljuduppspelning genom att spela en kort tyst buffer från
+    // en användargest. Efter detta får appen lov att starta ljud automatiskt.
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+      }
+    } catch {
+      /* ignorera – fungerar ändå med <audio>-elementets play() */
+    }
+    setStarted(true);
+  }, []);
+
+  if (!started) {
+    return <StartJourneyOverlay onStart={handleStart} />;
+  }
 
   return (
     <div className={styles.root}>

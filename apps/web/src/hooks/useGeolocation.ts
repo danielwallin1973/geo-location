@@ -20,13 +20,16 @@ export interface UseGeolocationResult {
  * Wrappar `navigator.geolocation.watchPosition` med React-state.
  * Detta är bara FÖRGRUNDS-tracking – när användaren minimerar browsern
  * pausar den. Det räcker för MVP; för bakgrund krävs nativ wrapper.
+ *
+ * @param enabled  Sätt false innan användaren tryckt "Starta resa".
  */
-export function useGeolocation(): UseGeolocationResult {
+export function useGeolocation(enabled = true): UseGeolocationResult {
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!enabled) return;
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       setError('Geolocation stöds inte i den här browsern.');
       setLoading(false);
@@ -55,7 +58,7 @@ export function useGeolocation(): UseGeolocationResult {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [enabled]);
 
   return { position, error, loading };
 }

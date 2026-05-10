@@ -2,21 +2,24 @@
  * Genererar mp3-ljudfiler för alla POI:er som har en `narration`-text och
  * en `audio_url` som pekar på `/audio/<filnamn>.mp3`.
  *
- * Körs lokalt: `pnpm --filter @geo-audio/api audio:generate`
+ * Körs lokalt: `pnpm --filter @geo-audio/web audio:generate`
+ *              `pnpm --filter @geo-audio/web audio:generate -- --force`  (regenerera)
  *
- * - Hoppar över POI:er där mp3:n redan finns (idempotent). Använd `--force`
- *   för att regenerera.
- * - Skriver filer till AUDIO_OUTPUT_DIR (default: apps/web/public/audio).
- * - Uppdaterar `audio_duration_seconds` i databasen efter generering om möjligt.
+ * Läser DATABASE_URL och OPENAI_* från apps/web/.env.local
  */
+import 'dotenv/config';
+import { config } from 'dotenv';
 import { mkdir, writeFile, access } from 'node:fs/promises';
 import { dirname, basename, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Pool } from 'pg';
 import OpenAI from 'openai';
-import { env } from '../env.js';
-import { pool } from '../db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Ladda .env.local explicit (Next.js-konvention; dotenv gör inte det automatiskt).
+config({ path: resolve(__dirname, '..', '.env.local') });
+
 const force = process.argv.includes('--force');
 
 interface PoiRow {
@@ -37,16 +40,32 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 async function main() {
-  if (!env.OPENAI_API_KEY) {
-    console.error('❌ OPENAI_API_KEY saknas i .env');
+  const dbUrl = process.env.DATABASE_URL;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const ttsModel = process.env.OPENAI_TTS_MODEL || 'tts-1';
+  const ttsVoice = process.env.OPENAI_TTS_VOICE || 'nova';
+  const outputDirRel = process.env.AUDIO_OUTPUT_DIR || 'public/audio';
+
+  if (!dbUrl) {
+    console.error('❌ DATABASE_URL saknas i apps/web/.env.local');
+    process.exit(1);
+  }
+  if (!openaiKey) {
+    console.error('❌ OPENAI_API_KEY saknas i apps/web/.env.local');
     process.exit(1);
   }
 
-  const outputDir = resolve(__dirname, '..', '..', env.AUDIO_OUTPUT_DIR);
+  const outputDir = resolve(__dirname, '..', outputDirRel);
   await mkdir(outputDir, { recursive: true });
   console.log(`📁 Output: ${outputDir}`);
 
-  const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  const pool = new Pool({
+    connectionString: dbUrl,
+    ssl: dbUrl.includes('localhost')
+      ? undefined
+      : { rejectUnauthorized: false },
+  });
+  const openai = new OpenAI({ apiKey: openaiKey });
 
   const { rows } = await pool.query<PoiRow>(
     `SELECT id, name, description, narration, audio_url FROM pois ORDER BY name`,
@@ -66,17 +85,16 @@ async function main() {
       continue;
     }
 
-    // Härled filnamn från audio_url (t.ex. /audio/stortorget.mp3 → stortorget.mp3)
     const filename = basename(poi.audio_url);
     if (!filename || extname(filename) !== '.mp3') {
-      console.log(`⚠️  ${poi.name}: ogiltig audio_url "${poi.audio_url}" – hoppar över.`);
+      console.log(`⚠️  ${poi.name}: ogiltig audio_url "${poi.audio_url}".`);
       skipped++;
       continue;
     }
     const outPath = resolve(outputDir, filename);
 
     if (!force && (await fileExists(outPath))) {
-      console.log(`⏭️  ${poi.name}: ${filename} finns redan (använd --force för att regenerera).`);
+      console.log(`⏭️  ${poi.name}: ${filename} finns redan.`);
       skipped++;
       continue;
     }
@@ -84,8 +102,8 @@ async function main() {
     try {
       console.log(`🎙️  ${poi.name}: genererar ${filename} (${text.length} tecken)…`);
       const response = await openai.audio.speech.create({
-        model: env.OPENAI_TTS_MODEL,
-        voice: env.OPENAI_TTS_VOICE,
+        model: ttsModel,
+        voice: ttsVoice,
         input: text,
         response_format: 'mp3',
       });
@@ -93,7 +111,6 @@ async function main() {
       const buffer = Buffer.from(await response.arrayBuffer());
       await writeFile(outPath, buffer);
 
-      // Grov uppskattning av längd: ~150 ord/min = ~2.5 ord/sek.
       const wordCount = text.split(/\s+/).length;
       const estimatedSeconds = Math.round(wordCount / 2.5);
 

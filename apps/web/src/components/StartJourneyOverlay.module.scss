@@ -1,0 +1,84 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: linear-gradient(160deg, #0b0f14 0%, #1a232e 100%);
+  display: grid;
+  place-items: center;
+  padding: v.$space-5;
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-size: 36px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, v.$color-accent, v.$color-accent-strong);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lede {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: v.$color-text-muted;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  font-size: 15px;
+  color: v.$color-text;
+  text-align: left;
+
+  li {
+    @include m.card;
+    padding: v.$space-3 v.$space-4;
+  }
+}
+
+.startBtn {
+  @include m.button-reset;
+  margin-top: v.$space-2;
+  background: v.$color-accent;
+  color: #1a1100;
+  font-size: 18px;
+  font-weight: 700;
+  padding: v.$space-4 v.$space-5;
+  border-radius: v.$radius-md;
+  transition:
+    background 0.2s ease,
+    transform 0.1s ease;
+
+  &:hover {
+    background: v.$color-accent-strong;
+    color: #fff;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.fineprint {
+  margin: 0;
+  font-size: 12px;
+  color: v.$color-text-muted;
+}
