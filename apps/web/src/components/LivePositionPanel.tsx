@@ -77,7 +77,7 @@ export function LivePositionPanel({ position, error, loading }: LivePositionPane
     <div
       style={{
         position: 'fixed',
-        bottom: 12,
+        top: 90,
         right: 12,
         zIndex: 9998,
         background: 'rgba(0,0,0,0.85)',
@@ -88,8 +88,8 @@ export function LivePositionPanel({ position, error, loading }: LivePositionPane
         fontFamily: 'ui-monospace, monospace',
         fontSize: 11,
         lineHeight: 1.4,
-        minWidth: 220,
-        maxWidth: 'min(92vw, 320px)',
+        minWidth: 200,
+        maxWidth: 'min(80vw, 280px)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>

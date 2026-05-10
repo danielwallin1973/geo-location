@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import type { Poi } from '@geo-audio/shared';
-import { useGeolocation } from '@/hooks/useGeolocation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Poi, LngLat } from '@geo-audio/shared';
+import { useGeolocation, type GeoPosition } from '@/hooks/useGeolocation';
 import { useGeofence } from '@/hooks/useGeofence';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { fetchNearbyPois } from '@/lib/api';
@@ -11,6 +11,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { StartJourneyOverlay } from './StartJourneyOverlay';
 import { GeoDebugOverlay } from './GeoDebugOverlay';
 import { LivePositionPanel } from './LivePositionPanel';
+import { SimulatorPanel } from './SimulatorPanel';
 import styles from './ExplorerView.module.scss';
 /**
  * Huvudvyn som binder ihop:
@@ -23,12 +24,32 @@ import styles from './ExplorerView.module.scss';
  */
 export function ExplorerView() {
   const [started, setStarted] = useState(false);
-  const { position, error, loading } = useGeolocation(started);
+  const realGeo = useGeolocation(started);
   const [pois, setPois] = useState<Poi[]>([]);
   const [activePoi, setActivePoi] = useState<Poi | null>(null);
   const [lastFetchCoords, setLastFetchCoords] = useState<
     [number, number] | null
   >(null);
+
+  // Simulator-state. När active=true ignoreras realGeo.
+  const [simActive, setSimActive] = useState(false);
+  const [simCoords, setSimCoords] = useState<LngLat | null>(null);
+
+  // Effektiv position = sim om aktiv, annars riktig.
+  const position: GeoPosition | null = useMemo(() => {
+    if (simActive && simCoords) {
+      return {
+        coords: simCoords,
+        accuracyMeters: 5,
+        timestamp: Date.now(),
+      };
+    }
+    return realGeo.position;
+  }, [simActive, simCoords, realGeo.position]);
+
+  const error = simActive ? null : realGeo.error;
+  const loading = simActive ? false : realGeo.loading;
+
   // Tickar varje sekund så att "senast uppdaterad för X s sedan" rör på sig.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -70,6 +91,38 @@ export function ExplorerView() {
     pois,
     onEnter: handleGeofenceEnter,
   });
+
+  const handleSimToggle = useCallback(
+    (next: boolean) => {
+      setSimActive(next);
+      if (next && !simCoords) {
+        // Starta från nuvarande riktiga position om vi har en, annars Stockholm.
+        setSimCoords(realGeo.position?.coords ?? [18.0686, 59.3293]);
+      }
+    },
+    [simCoords, realGeo.position],
+  );
+
+  const handleSimJumpTo = useCallback((coords: LngLat) => {
+    setSimCoords(coords);
+    setSimActive(true);
+    // Tvinga refetch av POI:er på den nya platsen.
+    setLastFetchCoords(null);
+  }, []);
+
+  const handleSimNudge = useCallback(
+    ({ east, north }: { east: number; north: number }) => {
+      setSimCoords((prev) => {
+        const base = prev ?? realGeo.position?.coords ?? [18.0686, 59.3293];
+        const [lng, lat] = base;
+        // Approximation: 1° lat ≈ 111 320 m, 1° lng ≈ 111 320 * cos(lat).
+        const dLat = north / 111_320;
+        const dLng = east / (111_320 * Math.cos((lat * Math.PI) / 180));
+        return [lng + dLng, lat + dLat];
+      });
+    },
+    [realGeo.position],
+  );
 
   const handleStart = useCallback(() => {
     // "Lås upp" ljuduppspelning genom att spela en kort tyst buffer från
@@ -130,6 +183,13 @@ export function ExplorerView() {
       <AudioPlayer poi={activePoi} onClose={() => setActivePoi(null)} />
       <LivePositionPanel position={position} error={error} loading={loading} />
       <GeoDebugOverlay enabled={started} position={position} error={error} />
+      <SimulatorPanel
+        pois={pois}
+        active={simActive}
+        onToggle={handleSimToggle}
+        onJumpTo={handleSimJumpTo}
+        onNudge={handleSimNudge}
+      />
     </div>
   );
 }
