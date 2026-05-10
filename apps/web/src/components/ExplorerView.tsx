@@ -107,8 +107,8 @@ export function ExplorerView() {
         <h1 className={styles.brand}>Geo Audio</h1>
         <p className={styles.status}>
           {loading && 'Söker din position…'}
-          {error && `Fel: ${error}`}
-          {!loading && !error && position && (
+          {!loading && !position && error && `Fel: ${error}`}
+          {position && (
             <>
               {pois.length} platser i närheten ·{' '}
               <span aria-label="precision">
@@ -119,6 +119,7 @@ export function ExplorerView() {
                 {position.coords[1].toFixed(5)}, {position.coords[0].toFixed(5)}
               </span>{' '}
               · uppd. {Math.max(0, Math.round((now - position.timestamp) / 1000))} s sedan
+              {error && <> · ⚠️ {error}</>}
             </>
           )}
         </p>
