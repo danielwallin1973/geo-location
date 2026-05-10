@@ -16,56 +16,27 @@ export interface UseGeolocationResult {
   loading: boolean;
 }
 
+const POLL_INTERVAL_MS = 3_000;
+
 /**
- * Wrappar `navigator.geolocation.watchPosition` med React-state.
+ * Pollar `navigator.geolocation.getCurrentPosition` var 3:e sekund.
  *
- * Inkluderar några viktiga robustheter för mobila browsers (särskilt Android
- * Chrome) som annars "tystnar" efter timeout eller efter en stunds inaktivitet:
+ * Vi använder polling istället för watchPosition eftersom Android Chrome
+ * är ökänt för att rapportera samma cachade position om och om igen från
+ * watchPosition utan att faktiskt uppdatera. getCurrentPosition med
+ * maximumAge=0 tvingar fram en ny lookup varje gång.
  *
- * - Watchdog som restartar watchPosition om vi inte fått fix på 20 s.
- * - Timeout-fel raderar inte senast kända position – vi visar den vidare
- *   med en mjuk "GPS svag"-statusrad.
- * - Re-startar watch när fliken återigen blir synlig.
+ * Vi varvar high/low accuracy:
+ * - Försök 1: high (GPS) med 8s timeout. Om det funkar, suverän precision.
+ * - Försök 2: low (WiFi) som fallback om high failar – nästan alltid snabbt.
  *
- * Detta är fortfarande bara FÖRGRUNDS-tracking. För bakgrund krävs nativ wrapper.
- *
- * @param enabled  Sätt false innan användaren tryckt "Starta resa".
+ * @param enabled Sätt false innan användaren tryckt "Starta resa".
  */
 export function useGeolocation(enabled = true): UseGeolocationResult {
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Tickas upp när vi vill omstarta watchPosition (visibilitychange + watchdog).
-  const [restartTick, setRestartTick] = useState(0);
-  const lastFixAtRef = useRef<number>(0);
-
-  // Re-starta när fliken blir synlig igen (Android Chrome fryser ofta i bakgrunden).
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        setRestartTick((t) => t + 1);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
-
-  // Watchdog: om vi inte fått fix på 20 s, omstarta watchPosition.
-  useEffect(() => {
-    if (!enabled) return;
-    const id = setInterval(() => {
-      const now = Date.now();
-      const last = lastFixAtRef.current;
-      if (last > 0 && now - last > 20_000) {
-        // Logga, ticka restart.
-        // eslint-disable-next-line no-console
-        console.warn('[geo] Ingen fix på 20 s – omstartar watchPosition.');
-        lastFixAtRef.current = now; // undvik tight loop
-        setRestartTick((t) => t + 1);
-      }
-    }, 5_000);
-    return () => clearInterval(id);
-  }, [enabled]);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -75,44 +46,66 @@ export function useGeolocation(enabled = true): UseGeolocationResult {
       return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        lastFixAtRef.current = Date.now();
-        setPosition({
-          coords: [pos.coords.longitude, pos.coords.latitude],
-          accuracyMeters: pos.coords.accuracy,
-          timestamp: pos.timestamp,
+    cancelledRef.current = false;
+
+    const tryGet = (highAccuracy: boolean): Promise<GeolocationPosition> =>
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: highAccuracy,
+          maximumAge: 0,
+          timeout: highAccuracy ? 8_000 : 15_000,
         });
-        setError(null);
-        setLoading(false);
-      },
-      (err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[geo] watchPosition error:', err.code, err.message);
-        // TIMEOUT (3) eller POSITION_UNAVAILABLE (2): behåll senaste position
-        // istället för att slänga den – visa bara mjuk varning.
+      });
+
+    const pollOnce = async () => {
+      // Försök high först. Faller tillbaka till low om timeout/unavailable.
+      let pos: GeolocationPosition;
+      try {
+        pos = await tryGet(true);
+      } catch (highErr) {
+        const err = highErr as GeolocationPositionError;
         if (err.code === err.PERMISSION_DENIED) {
-          setError('Platstillstånd nekat. Aktivera platsåtkomst i webbläsaren.');
-          setLoading(false);
+          if (!cancelledRef.current) {
+            setError('Platstillstånd nekat. Aktivera platsåtkomst.');
+            setLoading(false);
+          }
           return;
         }
-        setError(`GPS svag: ${err.message}`);
-        // Trigga en omstart efter en kort paus.
-        setTimeout(() => setRestartTick((t) => t + 1), 3_000);
-      },
-      {
-        // OBS: enableHighAccuracy:true triggar Android Chrome-bugg där GPS-chippet
-        // inte får fix → timeout. Med false använder vi WiFi/mobilmaster vilket
-        // ger ±50-100m noggrannhet men UPPDATERAS pålitligt när man går.
-        // För 50-80m geofence-radier är det fullt tillräckligt.
-        enableHighAccuracy: false,
-        maximumAge: 5_000,
-        timeout: 30_000,
-      },
-    );
+        try {
+          pos = await tryGet(false);
+        } catch (lowErr) {
+          const e = lowErr as GeolocationPositionError;
+          if (!cancelledRef.current) {
+            if (e.code === e.PERMISSION_DENIED) {
+              setError('Platstillstånd nekat. Aktivera platsåtkomst.');
+            } else {
+              setError(`GPS svag: ${e.message}`);
+            }
+            // Behåll senaste position; sluta inte loopen.
+          }
+          return;
+        }
+      }
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [enabled, restartTick]);
+      if (cancelledRef.current) return;
+      setPosition({
+        coords: [pos.coords.longitude, pos.coords.latitude],
+        accuracyMeters: pos.coords.accuracy,
+        timestamp: pos.timestamp,
+      });
+      setError(null);
+      setLoading(false);
+    };
+
+    // Första anropet direkt, sen var POLL_INTERVAL_MS.
+    pollOnce();
+    const id = setInterval(pollOnce, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(id);
+    };
+  }, [enabled]);
 
   return { position, error, loading };
 }
