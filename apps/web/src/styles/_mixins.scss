@@ -1,0 +1,28 @@
+@use 'variables' as v;
+
+@mixin card {
+  background: v.$color-surface;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-md;
+  box-shadow: v.$shadow-card;
+}
+
+@mixin button-reset {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+@mixin respond-to($bp) {
+  @if $bp == sm {
+    @media (min-width: v.$breakpoint-sm) { @content; }
+  } @else if $bp == md {
+    @media (min-width: v.$breakpoint-md) { @content; }
+  } @else if $bp == lg {
+    @media (min-width: v.$breakpoint-lg) { @content; }
+  }
+}

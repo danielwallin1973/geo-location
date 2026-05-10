@@ -1,0 +1,34 @@
+// Globala designtokens. Importeras automatiskt via sassOptions.includePaths
+// så att SCSS-moduler kan göra `@use 'variables' as v;`.
+
+$color-bg: #0b0f14;
+$color-surface: #131a22;
+$color-surface-elevated: #1a232e;
+$color-text: #e8eef5;
+$color-text-muted: #93a1b1;
+$color-accent: #ffb547;
+$color-accent-strong: #ff8a00;
+$color-success: #3ddc97;
+$color-danger: #ff5d6c;
+$color-border: rgba(255, 255, 255, 0.08);
+
+$radius-sm: 6px;
+$radius-md: 12px;
+$radius-lg: 20px;
+
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 24px;
+$space-6: 32px;
+
+$shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+$font-sans:
+  ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+  Arial, sans-serif;
+
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;

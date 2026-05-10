@@ -1,0 +1,61 @@
+@use 'variables' as v;
+
+.map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.userMarker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(59, 130, 246, 0.6);
+    animation: userPulse 2s ease-out infinite;
+  }
+}
+
+@keyframes userPulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.poiMarker {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: v.$color-accent;
+  border: 3px solid v.$color-bg;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease;
+
+  &:hover {
+    transform: scale(1.15);
+  }
+
+  &[data-active='true'] {
+    background: v.$color-accent-strong;
+    transform: scale(1.4);
+    box-shadow: 0 0 0 6px rgba(255, 138, 0, 0.3);
+  }
+}

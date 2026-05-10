@@ -1,0 +1,39 @@
+@use 'variables' as v;
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: v.$color-bg;
+  color: v.$color-text;
+  font-family: v.$font-sans;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+a {
+  color: v.$color-accent;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+button {
+  font-family: inherit;
+}
+
+#__next,
+main {
+  height: 100%;
+}

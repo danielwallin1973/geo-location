@@ -1,0 +1,33 @@
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# turbo / next
+.turbo/
+next-env.d.ts
+
+# docker volumes
+infra/data/

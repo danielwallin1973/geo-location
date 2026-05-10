@@ -1,0 +1,85 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+.player {
+  @include m.card;
+  position: fixed;
+  left: v.$space-3;
+  right: v.$space-3;
+  bottom: v.$space-3;
+  padding: v.$space-4;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+
+  @include m.respond-to(md) {
+    left: auto;
+    right: v.$space-5;
+    bottom: v.$space-5;
+    width: 420px;
+  }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: v.$space-3;
+}
+
+.kicker {
+  margin: 0 0 v.$space-1;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: v.$color-text-muted;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.closeBtn {
+  @include m.button-reset;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: v.$color-text;
+
+  &:hover { background: rgba(255, 255, 255, 0.12); }
+}
+
+.description {
+  margin: 0;
+  color: v.$color-text-muted;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  flex-wrap: wrap;
+}
+
+.playBtn {
+  @include m.button-reset;
+  background: v.$color-accent;
+  color: #1a1100;
+  font-weight: 600;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-sm;
+
+  &:hover { background: v.$color-accent-strong; color: #fff; }
+}
+
+.audio {
+  flex: 1;
+  min-width: 200px;
+  height: 36px;
+}
