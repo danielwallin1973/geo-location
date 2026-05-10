@@ -101,9 +101,11 @@ export function useGeolocation(enabled = true): UseGeolocationResult {
         setTimeout(() => setRestartTick((t) => t + 1), 3_000);
       },
       {
-        enableHighAccuracy: true,
-        // Tillåt fix upp till 5 s gammal – annars vägrar Android Chrome ofta
-        // returnera något alls och timar ut.
+        // OBS: enableHighAccuracy:true triggar Android Chrome-bugg där GPS-chippet
+        // inte får fix → timeout. Med false använder vi WiFi/mobilmaster vilket
+        // ger ±50-100m noggrannhet men UPPDATERAS pålitligt när man går.
+        // För 50-80m geofence-radier är det fullt tillräckligt.
+        enableHighAccuracy: false,
         maximumAge: 5_000,
         timeout: 30_000,
       },
