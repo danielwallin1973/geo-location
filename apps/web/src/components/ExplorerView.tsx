@@ -10,7 +10,6 @@ import { MapView } from './MapView';
 import { AudioPlayer } from './AudioPlayer';
 import { StartJourneyOverlay } from './StartJourneyOverlay';
 import styles from './ExplorerView.module.scss';
-
 /**
  * Huvudvyn som binder ihop:
  * - "Starta resa"-overlay (krävs för att låsa upp ljud-autoplay i iOS)
@@ -28,6 +27,12 @@ export function ExplorerView() {
   const [lastFetchCoords, setLastFetchCoords] = useState<
     [number, number] | null
   >(null);
+  // Tickar varje sekund så att "senast uppdaterad för X s sedan" rör på sig.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useWakeLock(started);
 
@@ -108,7 +113,12 @@ export function ExplorerView() {
               {pois.length} platser i närheten ·{' '}
               <span aria-label="precision">
                 ±{Math.round(position.accuracyMeters)} m
-              </span>
+              </span>{' '}
+              ·{' '}
+              <span aria-label="koordinater" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {position.coords[1].toFixed(5)}, {position.coords[0].toFixed(5)}
+              </span>{' '}
+              · uppd. {Math.max(0, Math.round((now - position.timestamp) / 1000))} s sedan
             </>
           )}
         </p>

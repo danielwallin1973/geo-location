@@ -27,6 +27,18 @@ export function useGeolocation(enabled = true): UseGeolocationResult {
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Tickas upp när fliken blir synlig igen → re-startar watchPosition.
+  const [restartTick, setRestartTick] = useState(0);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setRestartTick((t) => t + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -52,13 +64,13 @@ export function useGeolocation(enabled = true): UseGeolocationResult {
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5_000,
-        timeout: 20_000,
+        maximumAge: 0,
+        timeout: 30_000,
       },
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [enabled]);
+  }, [enabled, restartTick]);
 
   return { position, error, loading };
 }

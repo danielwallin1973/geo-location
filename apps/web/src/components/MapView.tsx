@@ -57,7 +57,7 @@ export function MapView({ userCoords, pois, activePoiId }: MapViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Uppdatera user-marker.
+  // Uppdatera user-marker + följ användaren mjukt.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !userCoords) return;
@@ -71,6 +71,14 @@ export function MapView({ userCoords, pois, activePoiId }: MapViewProps) {
       map.flyTo({ center: userCoords, zoom: 16 });
     } else {
       userMarkerRef.current.setLngLat(userCoords);
+      // Panorera mjukt om användaren rört sig långt från mitten.
+      const center = map.getCenter();
+      const dx = (userCoords[0] - center.lng) * 111_000;
+      const dy = (userCoords[1] - center.lat) * 111_000;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      if (distFromCenter > 80) {
+        map.easeTo({ center: userCoords, duration: 800 });
+      }
     }
   }, [userCoords]);
 
